@@ -5,6 +5,7 @@
   "author": "uzimith <uzimith.x9@gmail.com>",
   "description": "A simple helpful robot for your Company",
   "dependencies": {
+    "azure-storage": "^0.7.0",
     "coffee-script": "^1.10.0",
     "cron": "^1.1.0",
     "hubot": "^2.18.0",
