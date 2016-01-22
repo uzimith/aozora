@@ -38,15 +38,17 @@ module.exports = (robot) ->
         else
           robot.logger.info "create #{filename}"
 
-  load = (filename, times) ->
-    console.log("load!")
+  load = (filename) ->
     new Promise (resolve, reject) ->
       blobSvc.getBlobToText 'novels', filename, (error, response) ->
         if !error
-          start = times * 400
-          end   = start + 399
-          text = response[start..end]
-          resolve text
+          end = response.indexOf("。")
+          text = response[0..end]
+          remaining = response[(end+1)..-1]
+          resolve {
+            text: text,
+            remaining: remaining
+          }
         else
           reject "読み込みに失敗しました。"
 
@@ -57,7 +59,7 @@ module.exports = (robot) ->
     room = res.envelope.room
     url = res.match[1]
     filename = "#{room}.txt"
-    novels[room] = {url: url, times: 0, filename: filename}
+    novels[room] = {url: url, filename: filename}
     robot.brain.set "novels", novels
     client.fetch(url, null, (error, $, response) ->
       if !error
@@ -76,7 +78,7 @@ module.exports = (robot) ->
     room = res.envelope.room
     data = novels[room]
     if data
-      res.reply "#{data.url}: #{data.times}回"
+      res.reply "#{data.url}"
 
 
   robot.respond /delete/i, (res) ->
@@ -90,11 +92,11 @@ module.exports = (robot) ->
     novels = robot.brain.get("novels") || {}
     room = res.envelope.room
     data = novels[room]
-    load(data.filename, data.times)
-      .then (text) ->
-        res.send text
-        novels[room].times++
+    load(data.filename)
+      .then (response) ->
+        res.send response.text
         robot.brain.set "novels", novels
+        saveText(data.filename, response.remaining)
       .catch (error) ->
         res.reply error
 
@@ -103,19 +105,16 @@ module.exports = (robot) ->
 
   new cron '0 * * * * *', () =>
     novels = robot.brain.get("novels") || {}
-    console.log("run")
     processes = []
     for room, data of novels
-      processes.push [room, data]
-    while process = processes.pop()
-      load(data.filename, data.times)
-        .then (text) ->
-          robot.send {room: room}, text
-          novels[room].times++
-          console.log(room + text)
-          robot.logger.info "load #{filename}"
-        .catch (error) ->
-          robot.send {room: room}, error
-          robot.logger.error util.inspect(error)
+      ((room) ->
+        load(data.filename)
+          .then (text) ->
+            robot.send {room: room}, text
+            robot.logger.info "load #{filename}"
+          .catch (error) ->
+            robot.send {room: room}, error
+            robot.logger.error util.inspect(error)
+      )(room)
     robot.brain.set "novels", novels
   , null, true, "Asia/Tokyo"
