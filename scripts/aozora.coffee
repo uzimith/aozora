@@ -109,9 +109,10 @@ module.exports = (robot) ->
     for room, data of novels
       ((room) ->
         load(data.filename)
-          .then (text) ->
-            robot.send {room: room}, text
-            robot.logger.info "load #{filename}"
+          .then (response) ->
+            res.send response.text
+            robot.brain.set "novels", novels
+            saveText(data.filename, response.remaining)
           .catch (error) ->
             robot.send {room: room}, error
             robot.logger.error util.inspect(error)
