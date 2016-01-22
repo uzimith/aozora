@@ -52,6 +52,21 @@ module.exports = (robot) ->
         else
           reject "読み込みに失敗しました。"
 
+  all = () ->
+    novels = robot.brain.get("novels") || {}
+    Object.keys(novels).forEach (room) ->
+      data = novels[room]
+      return unless data.enable
+      load(data.filename)
+        .then (response) ->
+          robot.send {room: room}, response.text
+          robot.brain.set "novels", novels
+          saveText(data.filename, response.remaining)
+        .catch (error) ->
+          robot.send {room: room}, error
+          robot.logger.error util.inspect(error)
+    robot.brain.set "novels", novels
+
   init()
 
   robot.respond /set (.*)/i, (res) ->
@@ -59,7 +74,7 @@ module.exports = (robot) ->
     room = res.envelope.room
     url = res.match[1]
     filename = "#{room}.txt"
-    novels[room] = {url: url, filename: filename}
+    novels[room] = {url: url, filename: filename, enable: true}
     robot.brain.set "novels", novels
     client.fetch(url, null, (error, $, response) ->
       if !error
@@ -103,23 +118,26 @@ module.exports = (robot) ->
   robot.respond /debug/i, (res) ->
     res.reply JSON.stringify robot.brain.data._private
 
-  all = () ->
+  robot.respond /start/i, (res) ->
     novels = robot.brain.get("novels") || {}
-    Object.keys(novels).forEach (room) ->
-      data = novels[room]
-      load(data.filename)
-        .then (response) ->
-          robot.send {room: room}, response.text
-          robot.brain.set "novels", novels
-          saveText(data.filename, response.remaining)
-        .catch (error) ->
-          robot.send {room: room}, error
-          robot.logger.error util.inspect(error)
+    room = res.envelope.room
+    novels[room].enable = true
     robot.brain.set "novels", novels
+    res.reply "読書を開始しました。"
+
+  robot.respond /stop/i, (res) ->
+    novels = robot.brain.get("novels") || {}
+    room = res.envelope.room
+    novels[room].enable = false
+    robot.brain.set "novels", novels
+    res.reply "読書を停止しました。"
+
+  robot.respond /restart/i, (res) ->
 
   robot.respond /all/i, (res) ->
     all()
 
   new cron '0 * * * * *', () =>
+    robot.logger.info "cron: all"
     all()
   , null, true, "Asia/Tokyo"
