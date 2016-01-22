@@ -103,19 +103,23 @@ module.exports = (robot) ->
   robot.respond /debug/i, (res) ->
     res.reply JSON.stringify robot.brain.data._private
 
-  new cron '0 * * * * *', () =>
+  all = () ->
     novels = robot.brain.get("novels") || {}
-    processes = []
-    for room, data of novels
-      ((room) ->
-        load(data.filename)
-          .then (response) ->
-            res.send response.text
-            robot.brain.set "novels", novels
-            saveText(data.filename, response.remaining)
-          .catch (error) ->
-            robot.send {room: room}, error
-            robot.logger.error util.inspect(error)
-      )(room)
+    Object.keys(novels).forEach (room) ->
+      data = novels[room]
+      load(data.filename)
+        .then (response) ->
+          robot.send {room: room}, response.text
+          robot.brain.set "novels", novels
+          saveText(data.filename, response.remaining)
+        .catch (error) ->
+          robot.send {room: room}, error
+          robot.logger.error util.inspect(error)
     robot.brain.set "novels", novels
+
+  robot.respond /all/i, (res) ->
+    all()
+
+  new cron '0 * * * * *', () =>
+    all()
   , null, true, "Asia/Tokyo"
